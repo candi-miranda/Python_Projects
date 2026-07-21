@@ -1,6 +1,5 @@
-
-"""Formulação: Otimização Aerestrutural Completa (ATR 72-600)
-Estratégia: Malha leve (5x11), Scalers equilibrados, Tolerâncias relaxadas para convergência.
+"""Formulation: Complete Aerostructural Optimization (ATR 72-600)
+Strategy: Lightweight mesh (5x11), Balanced scalers, Relaxed tolerances for convergence.
 """
 
 import numpy as np
@@ -9,8 +8,7 @@ from openaerostruct.geometry.utils import generate_mesh
 from openaerostruct.integration.aerostruct_groups import AerostructGeometry, AerostructPoint
 
 
-# 1. COMPONENTE DE ALCANCE (BREGUET)
-
+# 1. RANGE COMPONENT (BREGUET)
 class BreguetRange(om.ExplicitComponent):
     def initialize(self):
         self.options.declare("surfaces", types=list)
@@ -34,8 +32,7 @@ class BreguetRange(om.ExplicitComponent):
         outputs["Range"] = M * a * inputs["CL"] / inputs["CD"] / CT * np.log(1 + WF / (W0 + Ws))
 
 
-# 2. PERFIL NACA E MALHAS (NATIVO E OTIMIZADO)
-
+# 2. NACA AIRFOIL AND MESHES (NATIVE AND OPTIMIZED)
 def naca4_wingbox(m, p, t, num=20):
     x = np.linspace(0.15, 0.60, num)
     yt = 5.0 * t * (0.2969 * np.sqrt(x) - 0.1260 * x - 0.3516 * (x**2) + 0.2843 * (x**3) - 0.1015 * (x**4))
@@ -47,20 +44,19 @@ def naca4_wingbox(m, p, t, num=20):
 w_xu, w_xl, w_yu, w_yl = naca4_wingbox(0.04, 0.3, 0.18)
 t_xu, t_xl, t_yu, t_yl = naca4_wingbox(0.00, 0.0, 0.09)
 
-# Malha rápida para permitir procura intensiva do otimizador (5 na corda, 11 na envergadura)
+# Fast mesh to allow intensive optimizer search (5 chordwise, 11 spanwise)
 mesh_wing = generate_mesh({"num_y": 11, "num_x": 5, "wing_type": "rect", "symmetry": True, "span": 27.05, "root_chord": 3.11})
 mesh_tail = generate_mesh({"num_y": 11, "num_x": 5, "wing_type": "rect", "symmetry": True, "span": 8.49, "root_chord": 1.8845})
 mesh_tail[:, :, 0] += 12.0
 
 
-# 3. SUPERFÍCIES
-
+# 3. SURFACES
 surf_wing = {
     "name": "wing", "symmetry": True, "S_ref_type": "projected", "fem_model_type": "wingbox", "mesh": mesh_wing,
     "span": 27.05, "sweep": 3.0, "taper": 0.45,
     "data_x_upper": w_xu, "data_x_lower": w_xl, "data_y_upper": w_yu, "data_y_lower": w_yl,
     
-    # Valores de arranque
+    # Starting values
     "spar_thickness_cp": np.array([0.015, 0.005]), "skin_thickness_cp": np.array([0.010, 0.004]),
     "twist_cp": np.zeros(3), 
     
@@ -88,8 +84,7 @@ surf_tail = {
 surfaces = [surf_wing, surf_tail]
 
 
-# 4. PROBLEMA E CONEXÕES OPENMDAO
-
+# 4. PROBLEM AND OPENMDAO CONNECTIONS
 prob = om.Problem()
 ivc = om.IndepVarComp()
 
@@ -142,7 +137,7 @@ for i in range(2):
 
 prob.model.add_subsystem("RangeCalc", BreguetRange(surfaces=surfaces), promotes_inputs=["CT", "WF", "W0"])
 
-# Ligar aos valores de performance global
+# Connect to global performance values
 prob.model.connect("AS_point_0.total_perf.CL", "RangeCalc.CL")
 prob.model.connect("AS_point_0.total_perf.CD", "RangeCalc.CD")
 
@@ -152,11 +147,10 @@ prob.model.connect("wing.structural_mass", "RangeCalc.wing_structural_mass")
 prob.model.connect("tail.structural_mass", "RangeCalc.tail_structural_mass")
 
 
-# 5. OTIMIZADOR (AERESTRUTURAL TOTAL)
-
+# 5. OPTIMIZER (FULL AEROSTRUCTURAL)
 prob.driver = om.ScipyOptimizeDriver(optimizer="SLSQP", tol=1e-3, maxiter=150)
 
-# Gravador ajustado exatamente para o nome que o plot_aerostruct.py procura
+# Recorder configured to match the exact filename expected by plot_aerostruct.py
 recorder = om.SqliteRecorder("aerostruct.db")
 prob.driver.add_recorder(recorder)
 prob.model.recording_options["record_outputs"] = True
@@ -166,7 +160,7 @@ prob.model.recording_options["record_residuals"] = True
 prob.model.add_recorder(recorder)
 prob.driver.recording_options["includes"] = ['*']
 
-# Variáveis Aerodinâmicas
+# Aerodynamic Variables
 prob.model.add_design_var("alpha", lower=-5.0, upper=15.0, units="deg", scaler=0.1)
 prob.model.add_design_var("alpha_maneuver", lower=-5.0, upper=15.0, units="deg", scaler=0.1)
 prob.model.add_design_var("wing.twist_cp", lower=-10.0, upper=10.0, units="deg", scaler=0.1)
@@ -175,28 +169,27 @@ prob.model.add_design_var("wing_span", lower=20.0, upper=35.0, units="m", scaler
 prob.model.add_design_var("tail_span", lower=7.0, upper=12.0, units="m", scaler=0.1) 
 prob.model.add_design_var("wing_sweep", lower=0.0, upper=15.0, units="deg", scaler=0.1)
 
-# Variáveis Estruturais
+# Structural Variables
 prob.model.add_design_var("wing.spar_thickness_cp", lower=0.005, upper=0.1, scaler=1e2)
 prob.model.add_design_var("wing.skin_thickness_cp", lower=0.005, upper=0.1, scaler=1e2)
 prob.model.add_design_var("tail.spar_thickness_cp", lower=0.002, upper=0.1, scaler=1e2)
 prob.model.add_design_var("tail.skin_thickness_cp", lower=0.002, upper=0.1, scaler=1e2)
 
-# Restrições de Voo e Integridade
+# Flight and Integrity Constraints
 prob.model.add_constraint("AS_point_0.L_equals_W", equals=0.0, scaler=1.0)
 prob.model.add_constraint("AS_point_1.L_equals_W", equals=0.0, scaler=1.0)
 prob.model.add_constraint("AS_point_0.CM", indices=[1], lower=-1e-3, upper=1e-3, scaler=1e1) 
 prob.model.add_constraint("AS_point_1.wing_perf.failure", upper=0.0)
 prob.model.add_constraint("AS_point_1.tail_perf.failure", upper=0.0)
 
-# Objetivo: Maximizar Alcance
+# Objective: Maximize Range
 prob.model.add_objective("RangeCalc.Range", scaler=-1e-4)
 
 
-# 6. SETUP E SOLUÇÃO
-
+# 6. SETUP AND SOLVING
 prob.setup()
 
-# Geração do N2 Diagram 
+# N2 Diagram Generation 
 om.n2(prob, outfile='n2_aerostrutural.html', show_browser=False)
 
 prob.model.AS_point_0.coupled.linear_solver = om.LinearBlockGS(iprint=0, maxiter=30, use_aitken=True)
@@ -207,20 +200,19 @@ prob.model.AS_point_0.coupled.nonlinear_solver.options['rtol'] = 1e-4
 prob.model.AS_point_1.coupled.nonlinear_solver.options['atol'] = 1e-4
 prob.model.AS_point_1.coupled.nonlinear_solver.options['rtol'] = 1e-4
 
-print("\nIniciando Otimização Aerestrutural. Processo ajustado e focado...")
+print("\nStarting Aerostructural Optimization. Tuned and focused process...")
 prob.run_driver()
 
 
-# Output dos resultados
-
+# Results Output
 print("\n" + "="*70)
-print("RESULTADOS DA OTIMIZAÇÃO AERESTRUTURAL FINAL (ATR 72-600)")
+print("FINAL AEROSTRUCTURAL OPTIMIZATION RESULTS (ATR 72-600)")
 print("="*70)
 
 print("The Range value is", prob.get_val("RangeCalc.Range", units="km")[0], "[km]")
 print("The wingbox mass is", prob.get_val("wing.structural_mass")[0] / surf_wing["wing_weight_ratio"], "[kg]")
 
-print("\n--- Variáveis de Voo e Forma Otimizadas ---")
+print("\n--- Optimized Flight and Shape Variables ---")
 print("alpha =", prob.get_val("alpha")[0], "deg")
 print("alpha 2.5g =", prob.get_val("alpha_maneuver")[0], "deg")
 print("sweep =", prob.get_val("wing_sweep")[0], "deg")
@@ -229,13 +221,13 @@ print("tail span =", prob.get_val("tail_span")[0], "m")
 print("wing twist_cp =", prob.get_val("wing.twist_cp"))
 print("tail twist_cp =", prob.get_val("tail.twist_cp"))
 
-print("\n--- Espessuras Estruturais Otimizadas ---")
+print("\n--- Optimized Structural Thicknesses ---")
 print("wing spar thickness =", prob.get_val("wing.spar_thickness_cp"))
 print("wing skin thickness =", prob.get_val("wing.skin_thickness_cp"))
 print("tail spar thickness =", prob.get_val("tail.spar_thickness_cp"))
 print("tail skin thickness =", prob.get_val("tail.skin_thickness_cp"))
 
-print("\n--- Performance e Restrições ---")
+print("\n--- Performance and Constraints ---")
 print("C_D =", prob.get_val("AS_point_0.total_perf.CD")[0])
 print("C_L =", prob.get_val("AS_point_0.total_perf.CL")[0])
 print("CM vector =", prob.get_val("AS_point_0.CM"))
