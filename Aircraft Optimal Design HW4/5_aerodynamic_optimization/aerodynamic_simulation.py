@@ -1,6 +1,6 @@
 """
-Projeto: Otimização Aerodinâmica (Fase 2) - ATR 72-600
-Objetivo: Maximização de Alcance (Breguet) via parâmetros aerodinâmicos e de forma.
+Project: Aerodynamic Optimization (Phase 2) - ATR 72-600
+Objective: Maximize Range (Breguet) via aerodynamic and shape parameters.
 """
 
 import numpy as np
@@ -9,8 +9,7 @@ from openaerostruct.geometry.utils import generate_mesh
 from openaerostruct.integration.aerostruct_groups import AerostructGeometry, AerostructPoint
 from math import sqrt
 
-# 1. COMPONENTE DE ALCANCE (BREGUET)
-
+# 1. RANGE COMPONENT (BREGUET)
 class BreguetRange(om.ExplicitComponent):
     def initialize(self):
         self.options.declare("surfaces", types=list)
@@ -34,8 +33,7 @@ class BreguetRange(om.ExplicitComponent):
         outputs["Range"] = M * a * inputs["CL"] / inputs["CD"] / CT * np.log(1 + WF / (W0 + Ws))
 
 
-# 2. GERADOR NACA E MALHAS 
-
+# 2. NACA GENERATOR AND MESHES 
 def naca4_wingbox(m, p, t, num=20):
     x = np.linspace(0.15, 0.60, num)
     yt = 5.0 * t * (0.2969 * np.sqrt(x) - 0.1260 * x - 0.3516 * (x**2) + 0.2843 * (x**3) - 0.1015 * (x**4))
@@ -47,22 +45,21 @@ def naca4_wingbox(m, p, t, num=20):
 w_xu, w_xl, w_yu, w_yl = naca4_wingbox(0.04, 0.3, 0.18, num=5)
 t_xu, t_xl, t_yu, t_yl = naca4_wingbox(0.00, 0.0, 0.09, num=5)
 
-# Malha aligeirada na corda (num_x=3) para velocidade e convergência VLM
+# Lightweight chordwise mesh (num_x=3) for VLM speed and convergence
 mesh_wing = generate_mesh({"num_y": 15, "num_x": 3, "wing_type": "rect", "symmetry": True, "span": 27.05, "root_chord": 3.11})
 mesh_tail = generate_mesh({"num_y": 11, "num_x": 3, "wing_type": "rect", "symmetry": True, "span": 7.43, "root_chord": 2.16})
 mesh_tail[:, :, 0] += 12.0
 
 
-# 3. DICIONÁRIOS DAS SUPERFÍCIES (Estrutura Trancada)
-
+# 3. SURFACE DICTIONARIES (Locked Structure)
 surf_wing = {
     "name": "wing", "symmetry": True, "S_ref_type": "projected", "fem_model_type": "wingbox", "mesh": mesh_wing,
     "data_x_upper": w_xu, "data_x_lower": w_xl, "data_y_upper": w_yu, "data_y_lower": w_yl,
     
-    # Valores Iniciais
+    # Initial Values
     "span": 27.05, "sweep": 3.0, "taper": 0.45,
     
-    # Espessuras Fixas (Não otimizadas nesta fase)
+    # Fixed Thicknesses (Not optimized in this phase)
     "spar_thickness_cp": np.array([0.015, 0.005]), "skin_thickness_cp": np.array([0.010, 0.004]),
     "twist_cp": np.zeros(3), "t_over_c_cp": np.array([0.18, 0.13]), "original_wingbox_airfoil_t_over_c": 0.18,
     "CL0": 0.15, "CD0": 0.015, "with_wave": False, "with_viscous": True, "k_lam": 0.05, "c_max_t": 0.30,
@@ -75,10 +72,10 @@ surf_tail = {
     "name": "tail", "symmetry": True, "S_ref_type": "projected", "fem_model_type": "wingbox", "mesh": mesh_tail,
     "data_x_upper": t_xu, "data_x_lower": t_xl, "data_y_upper": t_yu, "data_y_lower": t_yl,
     
-    # Valores Iniciais
+    # Initial Values
     "span": 7.43, "sweep": 0.0, "taper": 0.5,
     
-    # Espessuras Fixas
+    # Fixed Thicknesses
     "spar_thickness_cp": np.array([0.005, 0.002]), "skin_thickness_cp": np.array([0.004, 0.002]),
     "twist_cp": np.zeros(1), "t_over_c_cp": np.array([0.09]), "original_wingbox_airfoil_t_over_c": 0.09,
     "CL0": 0.0, "CD0": 0.015, "with_wave": False, "with_viscous": True, "k_lam": 0.05, "c_max_t": 0.30,
@@ -88,9 +85,7 @@ surf_tail = {
 }
 surfaces = [surf_wing, surf_tail]
 
-
-# 4. SETUP DO PROBLEMA E FÍSICA
-
+# 4. PROBLEM SETUP AND PHYSICS
 prob = om.Problem()
 
 altitude = np.array([7620.0, 0])  # FL250 
@@ -99,7 +94,7 @@ density = np.array([0.549, 1.225])
 R_gas = 287.052874
 gamma = 1.403
 mach = np.array([0.443, 0.443])
-c = np.array([309.6, 340.3])   
+c = np.array([309.6, 340.3])    
 velocity = mach * c
 Re = density * velocity / (1.4 * 1e-5)
 
@@ -160,15 +155,14 @@ prob.model.connect("wing.structural_mass", "RangeCalc.wing_structural_mass")
 prob.model.connect("tail.structural_mass", "RangeCalc.tail_structural_mass")
 
 
-# 5. OTIMIZADOR (AERODINÂMICO)
-
+# 5. OPTIMIZER (AERODYNAMIC)
 prob.driver = om.ScipyOptimizeDriver(optimizer="SLSQP", tol=1e-3, maxiter=100)
 
-# Variáveis de Trimagem
+# Trim Variables
 prob.model.add_design_var("alpha", lower=-5.0, upper=15.0, units="deg", scaler=0.1)
 prob.model.add_design_var("alpha_maneuver", lower=-5.0, upper=15.0, units="deg", scaler=0.1)
 
-# Variáveis Geométricas (Limites Realistas para Estrutura Fixa)
+# Geometric Variables (Realistic Limits for Fixed Structure)
 prob.model.add_design_var("wing.twist_cp", lower=-10.0, upper=10.0, units="deg", scaler=0.1)
 prob.model.add_design_var("tail.twist_cp", lower=-10.0, upper=10.0, units="deg", scaler=0.1)
 prob.model.add_design_var("wing_span", lower=26.0, upper=28.5, units="m", scaler=0.01)
@@ -185,8 +179,7 @@ prob.model.add_constraint("AS_point_1.tail_perf.failure", upper=0.0)
 # Objective
 prob.model.add_objective("RangeCalc.Range", scaler=-1e-4)
 
-# 6. SETUP E RESOLUÇÃO
-
+# 6. SETUP AND SOLVING
 prob.setup()
 
 prob.model.AS_point_0.coupled.linear_solver = om.LinearBlockGS(iprint=0, maxiter=30, use_aitken=True)
@@ -197,30 +190,29 @@ prob.model.AS_point_1.coupled.nonlinear_solver.options['atol'] = 1e-4
 prob.model.AS_point_1.coupled.nonlinear_solver.options['rtol'] = 1e-4
 
 print("\n" + "="*70)
-print("INICIANDO OTIMIZAÇÃO AERODINÂMICA (ATR 72-600)")
+print("STARTING AERODYNAMIC OPTIMIZATION (ATR 72-600)")
 print("="*70)
 
 prob.run_driver()
 
-# 7. TELEMETRIA FINAL
-
+# 7. FINAL TELEMETRY
 print("\n" + "="*70)
-print("RESULTADOS DA OTIMIZAÇÃO AERODINÂMICA")
+print("AERODYNAMIC OPTIMIZATION RESULTS")
 print("="*70)
 
-print("Range Máximo Otimizado =", prob.get_val("RangeCalc.Range", units="km")[0], "[km]")
-print("Massa da Asa (Wingbox) =", prob.get_val("wing.structural_mass")[0] / surf_wing["wing_weight_ratio"], "[kg]")
+print("Maximum Optimized Range =", prob.get_val("RangeCalc.Range", units="km")[0], "[km]")
+print("Wing Mass (Wingbox) =", prob.get_val("wing.structural_mass")[0] / surf_wing["wing_weight_ratio"], "[kg]")
 
-print("\n--- Variáveis Geométricas Otimizadas ---")
+print("\n--- Optimized Geometric Variables ---")
 print("wing_span =", prob.get_val("wing_span")[0], "[m]")
 print("tail_span =", prob.get_val("tail_span")[0], "[m]")
 print("wing_sweep =", prob.get_val("wing_sweep")[0], "[deg]")
 print("wing_twist_cp =", prob.get_val("wing.twist_cp"))
 print("tail_twist_cp =", prob.get_val("tail.twist_cp"))
 
-print("\n--- Restrições de Segurança (Devem estar <= 0) ---")
-print("Wing Failure (max a 2.5g) =", prob.get_val("AS_point_1.wing_perf.failure").max())
-print("Tail Failure (max a 2.5g) =", prob.get_val("AS_point_1.tail_perf.failure").max())
+print("\n--- Safety Constraints (Should be <= 0) ---")
+print("Wing Failure (max at 2.5g) =", prob.get_val("AS_point_1.wing_perf.failure").max())
+print("Tail Failure (max at 2.5g) =", prob.get_val("AS_point_1.tail_perf.failure").max())
 print("CM vector =", prob.get_val("AS_point_0.CM"))
 
 print("="*70)
