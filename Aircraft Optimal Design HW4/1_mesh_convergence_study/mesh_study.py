@@ -7,9 +7,6 @@ from openaerostruct.geometry.utils import generate_mesh
 from openaerostruct.integration.aerostruct_groups import AerostructGeometry, AerostructPoint
 from range_explicit import Range
 
-
-# Função auxiliar para criar mesh dict 
-
 def mesh_crea(num_y, num_x, span, corda, offset):
     return {
         "num_y": num_y, "num_x": num_x, "wing_type": "rect", "symmetry": True,
@@ -18,7 +15,7 @@ def mesh_crea(num_y, num_x, span, corda, offset):
 
 
 def run_case(nx, ny, verbose=False):
-    # Geometria base
+    # base geometry
     corda = 3.11
     span = 27.05
     Area_main = 61.0
@@ -29,11 +26,11 @@ def run_case(nx, ny, verbose=False):
     points_radius = 5
     points_thickness = 5
 
-    # Gera meshes
+    # generate meshes
     mesh_dict = mesh_crea(ny, nx, span, corda, [0, 0, 0])
     mesh = generate_mesh(mesh_dict)
 
-    # Aplica camber leve ao longo da corda 
+    # applies slight camber along the chord
     camber = (1 - np.linspace(-1, 1, nx) ** 2) * corda * 0.04
     for ind_x in range(nx):
         mesh[ind_x, :, 2] = camber[ind_x]
@@ -65,7 +62,7 @@ def run_case(nx, ny, verbose=False):
 
     surfaces = [surface, surface_tail]
 
-    # Monta o problema OpenMDAO
+    # Sets up the OpenMDAO problem
     prob = om.Problem()
 
     indep_var_comp = om.IndepVarComp()
@@ -83,7 +80,7 @@ def run_case(nx, ny, verbose=False):
 
     prob.model.add_subsystem("prob_vars", indep_var_comp, promotes=["*"])
 
-    # Subsistemas da geometria
+    # Subsystems of geometry
     aerostruct_group = AerostructGeometry(surface=surface)
     aerostruct_group_tail = AerostructGeometry(surface=surface_tail)
     prob.model.add_subsystem(name, aerostruct_group)
@@ -135,7 +132,7 @@ def run_case(nx, ny, verbose=False):
     prob.run_model()
     t1 = time.time()
 
-    # Extrai resultados
+    # Extracts results
     def safe_get(var):
         try:
             return float(prob.get_val(var)[0])
@@ -154,7 +151,7 @@ def run_case(nx, ny, verbose=False):
 
     run_time = t1 - t0
 
-    # cleanup para libertar memória
+    # cleanup to free up memory
     prob.cleanup()
 
     if verbose:
@@ -162,7 +159,7 @@ def run_case(nx, ny, verbose=False):
 
     return {"nx": nx, "ny": ny, "CL": CL, "CD_total": CD_total, "CD_wing": CD_wing, "CD_tail": CD_tail, "R_km": R_km, "time": run_time}
 
-# Parâmetros do sweep
+# Sweep parameters
 
 nx_fixed = 21               
 ny_list = [3, 5, 7, 9, 11, 15, 21, 31,41]   
@@ -206,9 +203,9 @@ plt.tight_layout()
 plt.show()
 
 
-# Recomendação simples de convergência
+# Simple convergence recommendation
 def recommend_nx(results, tol_rel=0.01):
-    # devolve o menor nx tal que CD está dentro de tol_rel relativo ao maior nx testado
+    # returns the smallest nx such that CD is within tol_rel relative to the largest nx tested
     if not results:
         return None
     max_CD = results[-1]["CD_total"]
