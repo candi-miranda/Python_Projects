@@ -1,6 +1,6 @@
 """
-Formulação: Baseline Simplificada ATR 72-600
-Objetivo: Trimagem (1.0g e 2.5g) e Maximização de Alcance (Breguet)
+Formulation: Simplified Baseline ATR 72-600
+Objective: Trim (1.0g and 2.5g) and Range Maximization (Breguet)
 """
 
 import numpy as np
@@ -9,7 +9,7 @@ from openaerostruct.geometry.utils import generate_mesh
 from openaerostruct.integration.aerostruct_groups import AerostructGeometry, AerostructPoint
 
 
-# 1. COMPONENTE DE ALCANCE (BREGUET) INTEGRADO
+# 1. RANGE COMPONENT (BREGUET) - INTEGRATED
 
 class BreguetRange(om.ExplicitComponent):
     def initialize(self):
@@ -34,7 +34,7 @@ class BreguetRange(om.ExplicitComponent):
         outputs["Range"] = M * a * inputs["CL"] / inputs["CD"] / CT * np.log(1 + WF / (W0 + Ws))
 
 
-# 2. GERADOR NACA 4-DÍGITOS E MALHAS
+# 2. NACA 4-DIGIT GENERATOR AND MESHES
 
 def naca4_wingbox(m, p, t, num=20):
     x = np.linspace(0.15, 0.60, num)
@@ -47,7 +47,7 @@ def naca4_wingbox(m, p, t, num=20):
 w_xu, w_xl, w_yu, w_yl = naca4_wingbox(0.04, 0.3, 0.18)
 t_xu, t_xl, t_yu, t_yl = naca4_wingbox(0.00, 0.0, 0.09)
 
-# Malhas ATR 72-600
+# ATR 72-600 meshes
 mesh_wing = generate_mesh({"num_y": 15, "num_x": 15, "wing_type": "rect", "symmetry": True, "span": 27.05, "root_chord": 3.11})
 for iy in range(mesh_wing.shape[1]):
     c_loc = 3.11 * (1 - (1 - 0.45) * (mesh_wing[0, iy, 1] / 13.525))
@@ -58,7 +58,7 @@ mesh_tail = generate_mesh({"num_y": 15, "num_x": 15, "wing_type": "rect", "symme
 mesh_tail[:, :, 0] += 12.0
 
 
-# 3. SUPERFÍCIES E PROPRIEDADES (Valores Reais e Estrutura Wingbox)
+# 3. SURFACES AND PROPERTIES (Real Values and Wingbox Structure)
 
 surf_wing = {
     "name": "wing", "symmetry": True, "S_ref_type": "projected", "fem_model_type": "wingbox", "mesh": mesh_wing,
@@ -84,7 +84,7 @@ surf_tail = {
 surfaces = [surf_wing, surf_tail]
 
 
-# 4. PROBLEMA E CONEXÕES OPENMDAO
+# 4. PROBLEM AND OPENMDAO CONNECTIONS
 
 prob = om.Problem()
 ivc = om.IndepVarComp()
@@ -127,7 +127,7 @@ for i in range(2):
         for prop in ["Qz", "J", "A_enc", "htop", "hbottom", "hfront", "hrear", "spar_thickness", "t_over_c"]:
             prob.model.connect(f"{name}.{prop}", cname + prop)
 
-# Componente Range Nativo
+# Native Range component
 prob.model.add_subsystem("RangeCalc", BreguetRange(surfaces=surfaces), promotes_inputs=["CT", "WF", "W0"])
 prob.model.connect("AS_point_0.CL", "RangeCalc.CL")
 prob.model.connect("AS_point_0.CD", "RangeCalc.CD")
@@ -137,23 +137,23 @@ prob.model.connect("wing.structural_mass", "RangeCalc.wing_structural_mass")
 prob.model.connect("tail.structural_mass", "RangeCalc.tail_structural_mass")
 
 
-# 5. OTIMIZADOR (TRIM & MAX RANGE)
+# 5. OPTIMIZER (TRIM & MAX RANGE)
 
 prob.driver = om.ScipyOptimizeDriver(optimizer="SLSQP", tol=1e-5, maxiter=50)
 
-# Variáveis de Trim
+# Trim variables
 prob.model.add_design_var("alpha", lower=-5.0, upper=15.0, units="deg")
 prob.model.add_design_var("alpha_maneuver", lower=-5.0, upper=15.0, units="deg")
 prob.model.add_design_var("tail.twist_cp", lower=-15.0, upper=15.0, units="deg")
 
-# Restrições de Voo (L=W e Pitching Moment nulo)
+# Flight constraints (L=W and zero pitching moment)
 prob.model.add_constraint("AS_point_0.L_equals_W", equals=0.0)
 prob.model.add_constraint("AS_point_1.L_equals_W", equals=0.0)
-prob.model.add_constraint("AS_point_0.CM", indices=[1], lower=-1e-4, upper=1e-4) # Momento equilibrado
+prob.model.add_constraint("AS_point_0.CM", indices=[1], lower=-1e-4, upper=1e-4) # Balanced moment
 prob.model.add_constraint("AS_point_1.wing_perf.failure", upper=0.0)
 prob.model.add_constraint("AS_point_1.tail_perf.failure", upper=0.0)
 
-# Objetivo Real: Maximizar Alcance (Scaler negativo converte minimização em maximização)
+# Real objective: Maximize Range (negative scaler converts minimization into maximization)
 prob.model.add_objective("RangeCalc.Range", scaler=-1e-3)
 
 prob.setup()
@@ -178,7 +178,7 @@ print(
 print("alpha =", prob.get_val("alpha"))
 print("alpha 2.5g =", prob.get_val("alpha_maneuver"))
 
-# Valores fixos na baseline 
+# Fixed values in the baseline
 print("sweep = [3.0] (fixed)")
 print("span = [27.05] (fixed)")
 print("tail span = [8.49] (fixed)")
@@ -193,7 +193,7 @@ print("tail C_D =", prob.get_val("AS_point_0.tail_perf.CD"))
 print("tail C_L =", prob.get_val("AS_point_0.tail_perf.CL"))
 print("CM vector =", prob.get_val("AS_point_0.CM"))
 
-# O CG é promovido nativamente pelo módulo total_perf
+# CG is natively promoted by the total_perf module
 try:
     print("CG vector =", prob.get_val("AS_point_0.cg"))
 except KeyError:
