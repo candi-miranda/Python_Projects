@@ -2,11 +2,11 @@ import matplotlib.pyplot as plt
 import openmdao.api as om
 import numpy as np
 
-# 1. Ler o histórico da otimização
+# 1. Read optimization history
 cr = om.CaseReader("aerostruct.db")
 driver_cases = cr.get_cases('driver', recurse=False)
 
-# 2. Listas para guardar histórico
+# 2. Lists to store history
 range_values = []
 
 alpha_values = []
@@ -28,9 +28,9 @@ AS_point0_CM_values = []
 AS_point1_wing_fail_values = []
 AS_point1_tail_fail_values = []
 
-# 3. Extrair valores de cada iteração 
+# 3. Extract values from each iteration 
 for case in driver_cases:
-    # Objetivo
+    # Objective
     range_values.append(case['RangeCalc.Range']/1000)
 
     # Trim
@@ -41,12 +41,12 @@ for case in driver_cases:
     wing_twist_values.append(case['wing.twist_cp'])
     tail_twist_values.append(case['tail.twist_cp'])
 
-    # Geometria
+    # Geometry
     wing_span_values.append(case['wing.geometry.span'])
     tail_span_values.append(case['tail.geometry.span'])
     wing_sweep_values.append(case['wing.sweep'])
 
-    # Estrutura
+    # Structure
     wing_spar_values.append(case['wing.spar_thickness_cp'])
     wing_skin_values.append(case['wing.skin_thickness_cp'])
 
@@ -62,8 +62,8 @@ iters = np.arange(len(driver_cases))
 # Range 
 plt.figure(figsize=(8,5))
 plt.plot(iters, range_values)
-plt.title("Range ao longo das iterações")
-plt.xlabel("Iteração")
+plt.title("Range over iterations")
+plt.xlabel("Iteration")
 plt.ylabel("Range [km]")
 plt.grid()
 plt.tight_layout()
@@ -73,9 +73,9 @@ plt.show()
 plt.figure(figsize=(8,5))
 plt.plot(iters, alpha_values)
 plt.plot(iters, alpha_maneuver_values)
-plt.title("Evolução dos ângulos de ataque")
-plt.xlabel("Iteração")
-plt.ylabel("Ângulos [deg]")
+plt.title("Angles of attack evolution")
+plt.xlabel("Iteration")
+plt.ylabel("Angles [deg]")
 plt.legend(["alpha", "alpha_maneuver"])
 plt.grid()
 plt.tight_layout()
@@ -87,8 +87,8 @@ plt.plot(iters, np.array(wing_twist_values)[:,0])
 plt.plot(iters, np.array(wing_twist_values)[:,1])
 plt.plot(iters, np.array(wing_twist_values)[:,2])
 plt.plot(iters, np.array(tail_twist_values))
-plt.title("Twist da asa e cauda")
-plt.xlabel("Iteração")
+plt.title("Wing and tail twist")
+plt.xlabel("Iteration")
 plt.ylabel("Twist [deg]")
 plt.legend(["Wing tip", "Wing mid", "Wing root", "Tail"])
 plt.grid()
@@ -101,9 +101,9 @@ plt.plot(iters, np.array(wing_spar_values)[:,0])
 plt.plot(iters, np.array(wing_spar_values)[:,1])
 plt.plot(iters, np.array(wing_skin_values)[:,0])
 plt.plot(iters, np.array(wing_skin_values)[:,1])
-plt.title("Espessuras estruturais da asa")
-plt.xlabel("Iteração")
-plt.ylabel("Espessura [m]")
+plt.title("Wing structural thicknesses")
+plt.xlabel("Iteration")
+plt.ylabel("Thickness [m]")
 plt.legend(["spar root", "spar tip", "skin root", "skin tip"])
 plt.grid()
 plt.tight_layout()
@@ -113,8 +113,8 @@ plt.show()
 plt.figure(figsize=(8,5))
 plt.plot(iters, AS_point0_LequalsW_values)
 plt.plot(iters, AS_point1_LequalsW_values)
-plt.title("Cumprimento das constraints L=W")
-plt.xlabel("Iteração")
+plt.title("L=W constraints compliance")
+plt.xlabel("Iteration")
 plt.ylabel("L-W")
 plt.legend(["Cruise", "Maneuver"])
 plt.grid()
@@ -125,7 +125,7 @@ plt.show()
 plt.figure(figsize=(8,5))
 plt.plot(iters, np.array(AS_point0_CM_values)[:,1])
 plt.title("Pitching Moment CM")
-plt.xlabel("Iteração")
+plt.xlabel("Iteration")
 plt.ylabel("CM")
 plt.grid()
 plt.tight_layout()
@@ -136,8 +136,8 @@ plt.figure(figsize=(8,5))
 plt.plot(iters, AS_point1_wing_fail_values)
 plt.plot(iters, AS_point1_tail_fail_values)
 plt.axhline(0, color='r', linestyle='--')
-plt.title("Failure constraints (wing e tail)")
-plt.xlabel("Iteração")
+plt.title("Failure constraints (wing and tail)")
+plt.xlabel("Iteration")
 plt.ylabel("failure")
 plt.legend(["Wing", "Tail"])
 plt.grid()
